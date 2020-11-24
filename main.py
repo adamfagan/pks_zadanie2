@@ -1,36 +1,70 @@
-from tkinter import *
+# ------------------------------------------
+# -- FLAG - SEQUENCE -     DATA     - CRC --
+# ------------------------------------------
+# from tkinter import *
 import socket
-from Client import Client
-from Server import Server
 
-file_name = ""
-message = ""
 
-print("1 -> Chcete data na server poslat")
-print("2 -> Chcete data zo servera stiahnut")
-option = input("Zadajte svoju ulohu: ")  # 1 alebo 2
-server_ip = input("Zadajte cielovu IP adresu servera: ")
-server_port = int(input("Zadajte cielovy port servera: "))
-fragment_size = int(input("Zadajte velkost fragmentu v Bytoch: "))
+def handshake(sock, server_ip, server_port):    # SYN = 02, ACK = 01, SYN + ACK = 21
+    flag = 2  # SYN
+    sequence_num = 1
+    header = bytes([flag, sequence_num])
+    sock.sendto(header, (server_ip, server_port))
+    data, server_ip_port = sock.recvfrom(fragment_size)
+    if data.hex()[:2] == "15":  # SYN + ACK
+        flag = 1  # ACK
+        sequence_num = 3
+        header = bytes([flag, sequence_num])
+        sock.sendto(header, server_ip_port)
 
-if option == "1":   # som vysielac
-    print("1 -> Chcete poslat spravu")
-    print("2 -> Chcete poslat subor")
-    option2 = int(input("Zadajte svoj vyber: "))
-    if option2 == 2:  # posiela sa subor
-        file_name = input("Zadajte nazov suboru aj s typom suboru (nazov.typ): ")
-        sender = Client(option2, file_name, fragment_size, server_ip, server_port)
-        receiver = Server(server_ip, server_port)
-        receiver.receive(sender, fragment_size)
-    elif option2 == 1:  # posiela sa sprava
+def client_sends_file(server_ip, server_port):
+    file_name = "test1.txt"  # input("Zadajte nazov suboru aj s typom suboru (nazov.typ): ")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    handshake(sock, server_ip, server_port)
+    with open(file_name, "rb") as file:
+        while True:
+            byte = file.read(fragment_size)
+            if not byte:
+                break
+            sock.sendto(byte, (server_ip, server_port))
+            data, server_ip_port = sock.recvfrom(fragment_size)
+            print(data)
+
+
+print("1 -> Klient")
+print("2 -> Server")
+option = int(input("Zadajte svoju ulohu: "))  # 1 alebo 2
+fragment_size = 200  # int(input("Zadajte velkost fragmentu v Bytoch: "))
+
+if option == 1:  # KLIENT
+    server_ip = "localhost"  # input("Zadajte cielovu IP adresu: ")
+    server_port = 5005  # int(input("Zadajte cielovy port: "))
+    print("1 -> Sprava")
+    print("2 -> Subor")
+    option2 = 2  # int(input("Zadajte svoj vyber: "))
+    if option2 == 2:  # KLIENT posiela SUBOR
+        client_sends_file(server_ip, server_port)
+    elif option2 == 1:  # KLIENT posiela SPRAVU
         message = input("Napiste spravu: ")
-        sender = Client(message)
-        receiver = Server(server_ip, server_port)
-        receiver.receive(sender, fragment_size)
-elif option == "2":
-    sender = Server(message)
-    receiver = Client()
-    receiver.receive(sender)
+
+elif option == 2:  # SERVER
+    server_ip = "localhost"  # input("Zadajte IP adresu: ")
+    server_port = 5005  # int(input("Zadajte port: "))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((server_ip, server_port))
+    while True:
+        data, client_ip_port = sock.recvfrom(fragment_size)
+        if data.hex()[:2] == "02":  # SYN
+            flag = 21  # SYN + ACK
+            sequence_num = 2
+            header = bytes([flag, sequence_num])
+            sock.sendto(header, client_ip_port)
+        else:
+            sock.sendto("Prijate".encode(), client_ip_port)
+
+# b'\x02\x01'
+# print(bytes.fromhex(data_hex).decode('utf-8'))
+
 
 
 

@@ -6,12 +6,15 @@ class Server:
         self.ip = server_ip
         self.port = server_port
 
-    def receive(self, sender):
+    def receive(self, sender, fragment_size):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind((self.ip, int(self.port)))
-        sender.send(self.ip, self.port)
-        data, client_ip_port = sock.recvfrom(1000)
-        print(data, client_ip_port)
+        sock.bind((self.ip, self.port))
+        sender.send()  # Tu treba zacat pracovat s fragmentovanim,...
+        while True:
+            data, client_ip_port = sock.recvfrom(fragment_size)
+            print(data)
 
-    def send(self, message):
+
+    """def send(self, message):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(self.message.encode(), (server_ip, int(server_port)))"""

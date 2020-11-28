@@ -10,10 +10,12 @@ from threading import Timer
 
 from crc16 import GetCrc16
 
-# ACK = 01
-# INF = 02
-# ERR = 03
-# DAT = 04
+ACK = 1
+INF = 2
+ERR = 3
+DAT = 4
+SIZE_OF_HEADER = 9
+SIZE_OF_CRC = 2
 
 def timer():
     print("Neprisla odpoved do 0.5 sekundy")
@@ -65,85 +67,105 @@ def client_sends_msg(data_size, fragment_size, server_ip, server_port, type_of_i
 
 
 def client_sends_file(data_size, fragment_size, server_ip, server_port, type_of_input, client_sock, file_name):
-    count_of_attempts = 2
     count_of_name_fragments = calculate_fragments(1, data_size, file_name)  # type = 1 -> fragmentuje ako string
     count_of_file_fragments = calculate_fragments(type_of_input, data_size, file_name)  # zistenie poctu posielanych fragmentov
-    print(count_of_name_fragments)
-    print(count_of_file_fragments)
 
-    header = create_header(2, 0, count_of_name_fragments, data_size)  # INF = 2, SQN = 0
-    header_and_data = header + (2).to_bytes(1, 'big')  # HEADER + DATA
-    crc16 = GetCrc16(str(int.from_bytes(header_and_data, 'big')))  # Vypocitanie CRC z HEADER a DATA
-    dat_message = crc16.to_bytes(2, 'big') + header_and_data  # Pridanie CRC pred hlavicku
-
-    client_sock.sendto(dat_message, (server_ip, server_port))  # KLIENT posiela informacie (INF) SERVERU o pocte fragmentoch s nazvom suboru
+    # ZACIATOK KOMUNIKACIE
+    # CLIENT POSIELA FRAGMENTY S MENOM SUBORU
+    # VYTVARANIE INF FRAGMENTU
+    header = create_header(INF, 0, count_of_name_fragments, data_size)
+    header_and_data = header + (2).to_bytes(1, 'big')
+    crc16 = GetCrc16(str(int.from_bytes(header_and_data, 'big')))
+    inf_message = crc16.to_bytes(2, 'big') + header_and_data
+    # KONIEC VYTVARANIA INF FRAGMENTU
+    # ODOSLANIE INF FRAGMENTU SERVERU
+    client_sock.sendto(inf_message, (server_ip, server_port))
     #t = Timer(0.5, timer)
     #t.start()
+    # CLIENT OCAKAVA ACK FRAGMENT OD SERVERA
     data, server_ip_port = client_sock.recvfrom(fragment_size)  # dostavam ACK na INF
     parsed_data = parse_data(data)
-    while parsed_data['flag'] == 3 and count_of_attempts > 0:
-        header = create_header(2, parsed_data['sequence']+1, count_of_name_fragments, data_size)  # INF = 2, SQN = 0
-        header_and_data = header + (2).to_bytes(1, 'big')  # HEADER + DATA
-        crc16 = GetCrc16(str(int.from_bytes(header_and_data, 'big')))  # Vypocitanie CRC z HEADER a DATA
-        dat_message = crc16.to_bytes(2, 'big') + header_and_data  # Pridanie CRC pred hlavicku
-        client_sock.sendto(dat_message, (server_ip, server_port))
+    count_of_attempts = 2
+    # AK INF FRAGMENT PRISIEL NA SERVER POSKODENY, TAK CLIENT SKUSA POSLAT INF FRAGMENT ESTE 2-KRAT
+    while parsed_data['flag'] == ERR and count_of_attempts > 0:
+        # VYTVARANIE INF FRAGMENTU
+        header = create_header(INF, parsed_data['sequence']+1, count_of_name_fragments, data_size)  # INF = 2, SQN = 0
+        header_and_data = header + (2).to_bytes(1, 'big')
+        crc16 = GetCrc16(str(int.from_bytes(header_and_data, 'big')))
+        inf_message = crc16.to_bytes(2, 'big') + header_and_data
+        # KONIEC VYTVARANIA INF FRAGMENTU
+        # ODOSLANIE INF FRAGMENTU SERVERU
+        client_sock.sendto(inf_message, (server_ip, server_port))
+        # CLIENT OCAKAVA ACK FRAGMENT OD SERVERA
         data, server_ip_port = client_sock.recvfrom(fragment_size)  # dostavam ACK na INF
         parsed_data = parse_data(data)
         count_of_attempts -= 1
 
-
-
-
-    # CLIENT posiela meno suboru aj s priponou
-    if parsed_data['flag'] == 1:  # CLIENT prijima ACK spravu na INF spravu
+    # CLIENT POSIELA DAT FRAGMENTY S MENOM SUBORU
+    if parsed_data['flag'] == ACK:
+        sent_fragments = []  # POLE S ODOSLANYCH FRAGMENTOV JEDNEHO BLOKU
         index = 1
-        sent_fragments = []
-        while index < count_of_name_fragments+1:  # 4 < 9   4 posiela 5.
-            header = create_header(4, parsed_data['sequence'] + 1, count_of_name_fragments, data_size)  # DAT 3 9 1
-            data_of_fragment = bytes(file_name[index-1:index-1+data_size], 'utf-8')  # t
+        while index < count_of_name_fragments+1:  # 1 < 10
+            # CLIENT POSIELA SERVERU "count_of_fragments" DAT FRAGMENTOV
+            # VYTVARANIE DAT FRAGMENTU
+            header = create_header(DAT, parsed_data['sequence']+1, count_of_name_fragments, data_size)
+            data_of_fragment = bytes(file_name[index-1:index-1+data_size], 'utf-8')
             header_and_data = header + data_of_fragment
-            sent_fragments.append(data_of_fragment)
             crc16 = GetCrc16(str(int.from_bytes(header_and_data, 'big')))
             dat_message = crc16.to_bytes(2, 'big') + header_and_data
+            # KONIEC VYTVARANIA DAT FRAGMENTU
+            # ODOSLANIE DAT FRAGMENTU SERVERU
+            client_sock.sendto(dat_message, (server_ip, server_port))
 
-            client_sock.sendto(dat_message, (server_ip, server_port))  # 8. -> t
+            # ULOZENIE SI PRAVE ODOSLANEHO DAT FRAGMENTU
+            sent_fragments.append(data_of_fragment)
 
-            if index % 5 == 0:  # index = 4  a posiela 5.
+
+
+
+            # PRIJIMANIE ACK ALEBO ERR FRAGMENTU PO ODOSLANI KAZDYCH 5 FRAGMENTOV
+            if index % 5 == 0:
+                # CLIENT OCAKAVA ACK ALEBO ERR FRAGMENT OD SERVERA
                 data, server_ip_port = client_sock.recvfrom(fragment_size)
-                parsed_data = parse_data(data)  # prijima ACK na posledne "t"
-                if parsed_data['flag'] == 1:    # ACK
+                parsed_data = parse_data(data)
+                if parsed_data['flag'] == ACK:
                     pass
-                elif parsed_data['flag'] == 3:  # ERR
-                    # TU SOM SOM SKONCIL - AK PRIDE ERR - NECYKLIT
-                    print(sent_fragments)
-                    print(parsed_data)
-                    print(parsed_data['data'])
-                    i = parsed_data['data_size']
-                    j = 0
-                    while j < i:
-                        sequence = int.from_bytes(parsed_data['data'][j:j+3], 'big')
-                        header = create_header(4, parsed_data['sequence'] + 1, count_of_name_fragments, data_size)  # DAT
+
+
+
+
+                elif parsed_data['flag'] == ERR:
+
+
+                    """i = 0
+                    while i < parsed_data['data_size']:
+                        sequence = int.from_bytes(parsed_data['data'][i:i+3], 'big')
+                        # VYTVARANIE DAT FRAGMENTU
+                        header = create_header(DAT, parsed_data['sequence']+1, count_of_name_fragments, data_size)
+                        # VYBRANIE DAT URCITEHO ZLE ODOSLANEHO FRAGMENTU
                         data_of_fragment = sent_fragments[sequence-2]
                         header_and_data = header + data_of_fragment
                         crc16 = GetCrc16(str(int.from_bytes(header_and_data, 'big')))
                         dat_message = crc16.to_bytes(2, 'big') + header_and_data
-
+                        # KONIEC VYTVARANIA DAT FRAGMENTU
+                        # ODOSLANIE DAT FRAGMENTU SERVERU
                         client_sock.sendto(dat_message, (server_ip, server_port))
-                        print(sequence, sent_fragments[sequence-2])
-                        j += 3
+
+                        i += 3"""
+
+
 
 
             else:
                 parsed_data = parse_data(dat_message)
-            index += 1  # 4
+            index += 1
 
+    elif parsed_data['flag'] == ERR:
+        client_sock.close()
+        print("INF fragment sa po 3 pokusoch nepodarilo dorucit")
 
-        # v parsed data mam ACK na posledne "t"
-        # Nazov suboru je v tomto bode doposielany
-
-
-
-    with open(file_name, "rb") as file:  # POSIELANIE DAT
+    # POSIELANIE DAT
+    with open(file_name, "rb") as file:
         while True:
             byte = file.read(data_size)
             # header =
@@ -174,79 +196,100 @@ def client():
 
 
 def server():
-    data_size = 1         # int(input("Zadajte velkost dat v Bytoch: "))
-    fragment_size = data_size + 11  # velkost hlavicky = 9, velkost CRC = 2
+    data_size = 1               # int(input("Zadajte velkost dat v Bytoch: "))
+    fragment_size = data_size + SIZE_OF_HEADER + SIZE_OF_CRC
     server_ip = "localhost"     # input("Zadajte IP adresu: ")
     server_port = 5005          # int(input("Zadajte port: "))
 
-    count_of_attempts = 2
     type_of_input = 0
     sequence = 0
     count_of_fragments = 0
 
+    # SERVER ZACINA POCUVAT NA "server_sock"
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_sock.bind((server_ip, server_port))
-    data, client_ip_port = server_sock.recvfrom(fragment_size)  # SERVER ocakava INF
+    # SERVER OCAKAVA INF FRAGMENT OD CLIENTA
+    data, client_ip_port = server_sock.recvfrom(fragment_size)
 
+    # PARSOVANIE INF FRAGMENTU
     parsed_data = parse_data(data)
 
+    # KONTROLA CI PRISIEL INF FRAGMENT SPRAVNE
     result = check_crc(data)
+
+    count_of_attempts = 2
+    # INF FRAGMENT NEPRISIEL SPRAVNE A SERVER SI ZIADA POSLAT INF FRAGMENT ESTE 2-KRAT
     while result == 0 and count_of_attempts > 0:  # INF sprava neprisla spravne, prebiehaju 3 pokusy o znovuposlanie INF spravy
-        print("Informacna sprava neprisla spravne")
+        print("Informacny fragment neprisiel spravne")
         print("Pocet zostavajucich pokusov: ", count_of_attempts)
-        header = create_header(3, parsed_data['sequence']+1, 0, 3)  # ERR = 3, SQN = 1, COUNT_OF_FRAGMENTS = 1, DATA_SIZE = 3
+
+        # VYTVARANIE ERR FRAGMENTU
+        header = create_header(ERR, parsed_data['sequence']+1, 0, 3)
         header_and_data = header + parsed_data['sequence'].to_bytes(3, 'big')
         crc16 = GetCrc16(str(int.from_bytes(header_and_data, 'big')))
-        inf_message = crc16.to_bytes(2, 'big') + header_and_data
-        server_sock.sendto(inf_message, client_ip_port)
+        err_message = crc16.to_bytes(2, 'big') + header_and_data
+        # KONIEC VYTVARANIA ERR FRAGMENTU
+        # ODOSLANIE ERR FRAGMENTU CLIENTOVI
+        server_sock.sendto(err_message, client_ip_port)
+        # SERVER OCAKAVA INF FRAGMENT OD CLIENTA
         data, client_ip_port = server_sock.recvfrom(fragment_size)
+        # PARSOVANIE INF FRAGMENTU
         parsed_data = parse_data(data)
         result = check_crc(data)
         count_of_attempts -= 1
+    # INF FRAGMENT NEPRISIEL OD CLIENTA 3-KRAT SPRAVNE A SERVER UZATVARA SVOJ SOCKET
     if result == 0 and count_of_attempts == 0:
         server_sock.close()
-        print("Informacna sprava po 3 pokusoch neprisla spravne")
-    elif result == 1:  # Prva informacna sprava prisla v poriadku
-        if parsed_data['flag'] == 2:
-            type_of_input = int.from_bytes(parsed_data['data'], 'big')  # 2
-            sequence = parsed_data['sequence']                          # 0
-            count_of_fragments = parsed_data['count_of_fragments']      # 9
-            header = create_header(1, parsed_data['sequence'] + 1, 0, 0)
+        print("Informacny fragment po 3 pokusoch neprisiel spravne")
+    # INF FRAGMENT PRISIEL SPRAVNE
+    elif result == 1:
+        if parsed_data['flag'] == INF:
+            type_of_input = int.from_bytes(parsed_data['data'], 'big')  # SPRAVA ALEBO SUBOR
+            count_of_fragments = parsed_data['count_of_fragments']
+            # VYTVARANIE ACK FRAGMENTU NA ODPOVEDANIE CLIENTOVI, ZE INF FRAGMENT PRISIEL SPAVNE
+            header = create_header(ACK, parsed_data['sequence']+1, 0, 0)
             crc16 = GetCrc16(str(int.from_bytes(header, 'big')))
-            inf_message = crc16.to_bytes(2, 'big') + header
-            server_sock.sendto(inf_message, client_ip_port)  # SERVER posiela ACK
+            ack_message = crc16.to_bytes(2, 'big') + header
+            # KONIEC VYTVARANIA ACK FRAGMENTU
+            # ODOSLANIE ACK FRAGMENTU CLIENTOVI
+            server_sock.sendto(ack_message, client_ip_port)  # SERVER posiela ACK
         if type_of_input == 2:  # SUBOR
-            # SERVER prijima data o nazve suboru
-
-
-
-
-            index = 1
-            heap_file_name = []
+            # SERVER PRIJIMA DAT FRAGMENTI O MENE SUBORU
+            heap_file_name = []  # BINARNA HALDA NA UKLADANIE MENA SUBORU
             heapq.heapify(heap_file_name)
-            error_results = []
-            while index < count_of_fragments+1:  # 4 < 9   4 caka na 5.
-                data, client_ip_port = server_sock.recvfrom(fragment_size)  # 5.
+            error_results = []  # POLE NA UKLADANIE CHYBNYCH FRAGMENTOV
+            index = 1
+
+
+
+
+            while index < count_of_fragments+1:  # 1 < 10
+                # SERVER PRIJIMA OD CLIENTA "count_of_fragments" DAT FRAGMENTOV
+                data, client_ip_port = server_sock.recvfrom(fragment_size)
                 parsed_data = parse_data(data)
                 result = check_crc(data)
-                if result == 0:  # chybny fragment
-                    error_results.append(parsed_data['sequence'])  # error_results[2]
-                    print(parsed_data)
-                    print(error_results)
+                # SERVER PRIJAL CHYBNY FRAGMENT
+                if result == 0:
+                    # PRIDANIE SEQUENCE (PORADIE) CHYBNEHO FRAGMENTU DO POLA CHYBNYCH FRAGMETOV
+                    error_results.append(parsed_data['sequence'])
+                # SERVER PRIJAL NEPOSKODENY FRAGMENT
                 elif result == 1:
+                    # PRIDANIE SEQUENCE (PORADIE) A DAT NEPOSKODENEHO FRAGMETU DO BINARNEJ HALDY
                     heapq.heappush(heap_file_name, (parsed_data['sequence'], parsed_data['data'].decode('utf-8')))  # 2 "t"
-
+                # PO KAZDYCH 5 PRIJATYCH FRAGMENTOCH ODOSIELA SERVER ACK ALEBO ERR FRAGMENT CLIENTOVI
                 if index % 5 == 0:
+                    # AK BOLI PRIJATE NEJAKE CHYBNE DAT FRAGMENTY, TAK SERVER POSIELA CLIENTOVI ERR FRAGMENT S CHYBNE PRIJATYMI FRAGMENTMI
                     if len(error_results) > 0:
-                        header = create_header(3, parsed_data['sequence'] + 1, len(error_results), len(error_results)*3)  # ERR
+                        # VYTVARANIE ERR FRAGMENTU
+                        header = create_header(ERR, parsed_data['sequence']+1, len(error_results), len(error_results)*3)  # *3 PRETOZE KAZDY SEQUENCE ZABERA 3 BYTY
                         data_of_fragment = bytes()
                         for fragment in error_results:
                             data_of_fragment += fragment.to_bytes(3, 'big')
                         header_and_data = header + data_of_fragment
                         crc16 = GetCrc16(str(int.from_bytes(header_and_data, 'big')))
                         err_message = crc16.to_bytes(2, 'big') + header_and_data
-                        print("ERRORS - ", error_results)
-                        print("HEAP - ", heap_file_name)
+                        # KONIEC VYTVARANIA ERR FRAGMENTU
+                        # ODOSLANIE ERR FRAGMENTU CLIENTOVI
                         server_sock.sendto(err_message, client_ip_port)
                         """i = 0  ZLE - ZACYKLUJEM SA
                         while i < len(error_results):
@@ -254,29 +297,28 @@ def server():
                             parsed_data = parse_data(data)
                             heapq.heappush(heap_file_name, (parsed_data['sequence'], parsed_data['data'].decode('utf-8')))
                             i += 1"""
+                    # VSETKY DAT FRAGMENTY BOLI PRIJATE NEPOSKODENE
                     elif len(error_results) == 0:
-                        header = create_header(1, parsed_data['sequence'] + 1, 0, 0)  # ACK
+                        # VYTVARANIE ACK FRAGMENTU
+                        header = create_header(ACK, parsed_data['sequence']+1, 0, 0)  # ACK
                         crc16 = GetCrc16(str(int.from_bytes(header, 'big')))
-                        inf_message = crc16.to_bytes(2, 'big') + header
-                        server_sock.sendto(inf_message, client_ip_port)
+                        ack_message = crc16.to_bytes(2, 'big') + header
+                        # KONIEC VYTVARANIA ACK FRAGMENTU
+                        # ODOSLANIE ACK FRAGMENTU CLIENTOVI
+                        server_sock.sendto(ack_message, client_ip_port)
                 index += 1  # 4
-
-
-
+            # SKLADANIE MENO SUBORU Z BINARNEJ HALDY
             file_name = ""
             while heap_file_name:
                 file_name += heapq.heappop(heap_file_name)[1]
             print(file_name)
-            print("Uz nepocuvam")
-
-
-    # {'crc': 51641, 'flag': 2, 'sequence': 0, 'count_of_fragments': 9, 'data_size': 1, 'data': b'\x02'}
-
+        elif type_of_input == 1:  # SPRAVA
+            pass
 
 
 
 
-    header = create_header("ACK", parsed_data["sqn"] + 1, 0, 0)  # 5 odstranit a nahradit uz parsnutimi datami
+    header = create_header(ACK, parsed_data["sqn"] + 1, 0, 0)  # 5 odstranit a nahradit uz parsnutimi datami
     server_sock.sendto(header, client_ip_port)
     while True:
         data, client_ip_port = server_sock.recvfrom(fragment_size)

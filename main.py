@@ -61,6 +61,7 @@ def calculate_fragments(type_of_input, data_size, file_or_msg):
         else:
             return int(size_of_file / data_size)
 
+
 def client_sends_msg(data_size, fragment_size, server_ip, server_port, type_of_input, client_sock, message):
     count_of_fragments_msg = calculate_fragments(type_of_input, data_size, message)  # zistenie poctu posielanych fragmentov
     sequence_num_msg = 0
@@ -200,16 +201,6 @@ def client_sends_file(data_size, fragment_size, server_ip, server_port, type_of_
                     print("[KLIENT] Posielam fragment znova", "      ", "Poradie fragmentu: ", sequence_num,
                           "      ", "Povodne poradie fragmentu: ", sequence, "      ", "Velkost: ", data_size, "[Byte]",
                           "      ", "Data: ", data_of_fragment)
-                    # testovanie posielania kazdeho neparneho
-                    """if sequence_num % 2 == 0:
-                        print("neposlany INDEX -  ", sequence, "data", data_of_fragment)
-                        #sequence_num -= 1
-                        time.sleep(2)
-                        #client_sock.sendto(dat_message, (server_ip, server_port))
-                    else:
-                        print("SEQ 3 = ", sequence_num)
-                        print("Odoslal som znova - ", sequence, "data", sent_fragments.get(sequence))
-                        client_sock.sendto(dat_message, (server_ip, server_port))"""
                     already_sent_fragments += 1
                     sent_fragments[sequence_num] = data_of_fragment
                     sequence_num += 1
@@ -226,15 +217,6 @@ def client_sends_file(data_size, fragment_size, server_ip, server_port, type_of_
                 # KONIEC VYTVARANIA DAT FRAGMENTU
                 # ODOSLANIE DAT FRAGMENTU SERVERU
                 # Odkomentujte pre testovanie posielania kazdeho neparneho
-                """if sequence_num % 2 == 0:
-                    #print(index)
-                    print("neposlany INDEX - ", sequence_num, "data", data_of_fragment)
-                    #sequence_num -= 1
-                    time.sleep(3)
-                    #client_sock.sendto(dat_message, (server_ip, server_port))
-                else:
-                    print("Odoslal som prvykrat - ", sequence_num, "data", file_name[index:index+data_size])
-                    client_sock.sendto(dat_message, (server_ip, server_port))"""
                 client_sock.sendto(dat_message, (server_ip, server_port))
                 print("[KLIENT] Posielam novy fragment", "      ", "Poradie fragmentu: ", sequence_num, "      ",
                       "Velkost: ", data_size, "[Byte]", "      ", "Data: ", data_of_fragment)
@@ -356,7 +338,6 @@ def server(server_sock, path, ip_port):
         while True:
             # SERVER OCAKAVA INF FRAGMENT OD CLIENTA
             if new_inf == 0:
-                print("NEW_inf", new_inf)
                 data, client_ip_port = server_sock.recvfrom(2048)
 
             # PARSOVANIE INF FRAGMENTU
@@ -419,11 +400,6 @@ def server(server_sock, path, ip_port):
                                 error_results.append(parsed_data['sequence'])
                             # SERVER PRIJAL NEPOSKODENY SAG FRAGMENT
                             elif result == 1:
-                                # testovanie kazdeho neparneho
-                                """heapq.heappush(received_msg, (error_results[index], parsed_data['data']))  # (e, 13) (s, 14) (1, 16)
-                                print("[SERVER] Spravne prijaty fragment: ", count_of_accepted_fragments, "    ", "Poradie fragmentu: ", parsed_data['sequence'], "    ", "Velkost: ", parsed_data['data_size'], "[Byte]")
-                                error_results.pop(index)"""
-
                                 heapq.heappush(received_msg, (error_results_heap[sag_flags], parsed_data['data']))
                                 print("[SERVER] Spravne prijaty fragment: ", count_of_accepted_fragments, "    ",
                                       "Poradie fragmentu: ", parsed_data['sequence'], "    ", "Velkost: ",
@@ -451,7 +427,6 @@ def server(server_sock, path, ip_port):
                                 # ODOSLANIE ERR FRAGMENTU CLIENTOVI
                                 server_sock.sendto(err_message, client_ip_port)
                                 error_results.clear()
-                                #error_results_size = len(error_results) - pre testovanie kazdeho neparneho
                             # VSETKY DAT FRAGMENTY BOLI PRIJATE NEPOSKODENE
                             elif len(error_results) == 0:
                                 # VYTVARANIE ACK FRAGMENTU
@@ -531,7 +506,6 @@ def server(server_sock, path, ip_port):
                     error_results.clear()  # POLE NA UKLADANIE CHYBNYCH FRAGMENTOV
                     index = 1
                     total_size = 0
-                    file_size = os.path.getsize(path)
                     error_results_heap.clear()
                     sag_flags = 0
 
@@ -567,10 +541,6 @@ def server(server_sock, path, ip_port):
                                     error_results.append(parsed_data['sequence'])
                                 # SERVER PRIJAL NEPOSKODENY SAG FRAGMENT
                                 elif result == 1:
-                                    # testovanie kazdeho neparneho
-                                    """heapq.heappush(received_msg, (error_results[index], parsed_data['data']))
-                                    error_results.pop(index)
-                                    error_results.pop(index)"""
                                     heapq.heappush(received_msg, (error_results_heap[sag_flags], parsed_data['data']))
                                     print("[SERVER] Spravne prijaty fragment: ", count_of_accepted_fragments,
                                           "    ", "Poradie fragmentu: ", parsed_data['sequence'], "    ",
@@ -644,7 +614,7 @@ def server(server_sock, path, ip_port):
                                     server_sock.sendto(ack_message, client_ip_port)
                             index += 1
 
-                    # SKLADANIE MENA SUBORU Z BINARNEJ HALDY
+                    # SKLADANIE NAZVU SUBORU Z BINARNEJ HALDY
                     print("")
                     print("[SERVER] Vkladam data do suboru")
                     with open(os.path.join(path, file_name), 'wb') as fp:
@@ -700,9 +670,6 @@ def server(server_sock, path, ip_port):
                                 error_results.append(parsed_data['sequence'])
                             # SERVER PRIJAL NEPOSKODENY SAG FRAGMENT
                             elif result == 1:
-                                # testovanie kazdeho nepareho
-                                # heapq.heappush(received_msg, (error_results_heap[sag_flags], parsed_data['data']))
-                                # error_results.pop(index)
                                 heapq.heappush(received_msg, (error_results_heap[sag_flags], parsed_data['data']))
                                 print("[SERVER] Spravne prijaty fragment: ", count_of_accepted_fragments, "    ",
                                       "Poradie fragmentu: ", parsed_data['sequence'], "    ", "Velkost: ",
@@ -806,7 +773,7 @@ def server(server_sock, path, ip_port):
                 server_sock.settimeout(20)
                 # ODOSLANIE ACK FRAGMENTU CLIENTOVI
                 print("[SERVER] posielam - ACK na KEEP ALIVE")
-                server_sock.sendto(ack_message, client_ip_port)  # SERVER posiela ACK
+                server_sock.sendto(ack_message, client_ip_port)
                 data, client_ip_port = server_sock.recvfrom(2048)
                 print("[SERVER] prijimam - KEEP ALIVE")
                 parsed_data = parse_data(data)
@@ -834,17 +801,15 @@ def keep_alive_client(server_ip, server_port, client_sock):
 
 
 def client(client_sock, server_ip, server_port):
-    print("[KLIENT]")
-    print("1 -> Sprava")
-    print("2 -> Subor")
-    print("3 -> Navrat do menu")
-    type_of_input = int(input("Zadajte svoj vyber: "))
+    print("[KLIENT] 1 -> Sprava")
+    print("[KLIENT] 2 -> Subor")
+    print("[KLIENT] 3 -> Navrat do menu")
+    type_of_input = int(input("[KLIENT] Zadajte vas vyber: "))
 
     terminate_event.set()
 
     if type_of_input == 1:  # SPRAVA
         message = input("[KLIENT] Napiste spravu: ")
-        print(len(message))
         print("[KLIENT] Maximalna velkost fragmentu je 1461 [1500 - 28(IP+UDP header) - 9(hlavicka) - 2(CRC)]")
         data_size = int(input("[KLIENT] Zadajte velkost dat v Bytoch: "))
         fragment_size_client = data_size + SIZE_OF_HEADER + SIZE_OF_CRC + 15  # CLIENT moze prijat ERR packet, v ktorom bude 5 chybnych fragmentov so svojim sequence (kazdy ma 3 Byty)
@@ -862,9 +827,10 @@ def client(client_sock, server_ip, server_port):
 
     return 0
 
+
 def client_prepare():
-        server_ip = "localhost"  # input("Zadajte cielovu IP adresu: ")
-        server_port = 5005  # int(input("Zadajte cielovy port: "))
+        server_ip = input("Zadajte IP servera: ")
+        server_port = int(input("Zadajte port servera: "))
 
         client_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -872,7 +838,7 @@ def client_prepare():
             returned = client(client_sock, server_ip, server_port)
             if returned == 0:
                 print("")
-                print("[KLIENT] spustam na pozadi KEEP ALIVE")
+                print("[KLIENT] Spustam KEEP ALIVE na pozadi")
                 print("")
                 terminate_event.clear()
                 thread = threading.Thread(target=keep_alive_client, args=(server_ip, server_port, client_sock))
@@ -882,11 +848,12 @@ def client_prepare():
                 client_sock.close()
                 return
 
-def server_prepare():
-    server_ip = "localhost"  # input("Zadajte cielovu IP adresu: ")
-    server_port = 5005  # int(input("Zadajte cielovy port: "))
 
-    path = 'C:/Users/adamf/Desktop/PKS_files'
+def server_prepare():
+    server_ip = input("Zadajte IP adresu: ")
+    server_port = int(input("Zadajte port: "))
+
+    path = input("Zadajte celu cielovu cestu vo formate napriklad C:/Users/... : ")
 
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     ip_port = (server_ip, server_port)
@@ -902,7 +869,7 @@ while True:
     terminate_event.set()
     print("1 -> Klient")
     print("2 -> Server")
-    option = int(input("Zadajte svoju ulohu: "))  # 1 alebo 2
+    option = int(input("Zadajte vasu funkciu: "))
 
     # *KLIENT*
     if option == 1:

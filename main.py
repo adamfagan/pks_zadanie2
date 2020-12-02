@@ -816,7 +816,7 @@ def client(client_sock, server_ip, server_port):
         print("[KLIENT] Posielam spravu: ", message)
         client_sends_msg(data_size, fragment_size_client, server_ip, server_port, type_of_input, client_sock, message)
     elif type_of_input == 2:  # SUBOR
-        file_name = "test1.txt"  # input("Zadajte nazov suboru aj s typom suboru (nazov.typ): ")
+        file_name = input("Zadajte nazov suboru aj s typom suboru (nazov.typ): ")
         print("[KLIENT] Maximalna velkost fragmentu je 1461 [1500 - 28(IP+UDP header) - 9(hlavicka) - 2(CRC)]")
         data_size = int(input("[KLIENT] Zadajte velkost dat v Bytoch: "))
         fragment_size_client = data_size + SIZE_OF_HEADER + SIZE_OF_CRC + 15  # CLIENT moze prijat ERR packet, v ktorom bude 5 chybnych fragmentov so svojim sequence (kazdy ma 3 Byty)

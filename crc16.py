@@ -38,7 +38,6 @@ def GetCrc16(strHexData):
     i = 0
     while i < len(strHexData):
         strHexNumber = strHexData[i:i+2]
-        #print("str "+strHexNumber)
         intNumber = int(strHexNumber, 16)
         crc16tabIndex = (fcs ^ intNumber) & int("FF", 16)
         fcs = (fcs >> 8) ^ crc16tab[crc16tabIndex]
